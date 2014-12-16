@@ -2,12 +2,12 @@ package playlyfe
 
 import (
 	"code.google.com/p/goauth2/oauth"
+	"errors"
 	"fmt"
-	"log"
 	"os"
 )
 
-const authorizationUrl string = "https://api.playlyfe.com/v1/auth"
+const authorizationUrl string = "https://playlyfe.com/auth"
 const tokenUrl string = "https://playlyfe.com/auth/token"
 
 type PlaylyfeClientConfiguration struct {
@@ -15,10 +15,11 @@ type PlaylyfeClientConfiguration struct {
 	ClientSecret string
 	RedirectUrl  string
 	Type         string
+	Code         string
 	CacheFile    string
 }
 
-func Client(configuration PlaylyfeClientConfiguration) (client PlaylyfeClient, err error) {
+func Client(configuration PlaylyfeClientConfiguration) (client *PlaylyfeClient, err error) {
 	if configuration.Type == "" {
 		configuration.Type = "code"
 	}
@@ -30,24 +31,33 @@ func Client(configuration PlaylyfeClientConfiguration) (client PlaylyfeClient, e
 		AuthURL:      authorizationUrl,
 		TokenURL:     tokenUrl,
 		TokenCache:   oauth.CacheFile(configuration.CacheFile),
-		AccessType:   configuration.Type,
 	}
 	transport := &oauth.Transport{Config: config}
 
 	token, err := config.TokenCache.Token()
 	if err != nil {
 		token, err = getToken(configuration, transport, config)
+		if err != nil {
+			return nil, err
+		} else if token == nil {
+			return nil, errors.New("There was a error when trying to get the token")
+		}
 	}
 
 	if token.Expired() {
 		token, err = getToken(configuration, transport, config)
+		if err != nil {
+			return nil, err
+		} else if token == nil {
+			return nil, errors.New("There was a error when trying to get the token")
+		}
 	}
 
 	transport.Token = token
 
 	httpClient := transport.Client()
 
-	client = PlaylyfeClient{http: *httpClient}
+	client = &PlaylyfeClient{http: *httpClient}
 
 	return client, nil
 }
@@ -60,32 +70,29 @@ func getToken(configuration PlaylyfeClientConfiguration, transport *oauth.Transp
 
 	switch configuration.Type {
 	case "code":
-		//TODO: Needs implementing of code based authentication
-		/*if *code == "" {
-		      url := config.AuthCodeURL("")
-		      fmt.Print("Visit this URL to get a code, then run again with -code=YOUR_CODE\n\n")
-		      fmt.Println(url)
-		      return
-		  }
+		if configuration.Code == "" {
+			url := config.AuthCodeURL("")
+			return nil, errors.New(url)
+		}
 
-		  token, err = transport.Exchange(*code)
-		  if err != nil {
-		      log.Fatal("Exchange:", err)
-		  }*/
+		token, err = transport.Exchange(configuration.Code)
+		if err != nil {
+			return nil, err
+		}
 	case "client":
 		err = transport.AuthenticateClient()
 		if err != nil {
-			log.Fatal("Authenticate Client:", err)
+			return nil, err
 		}
 
 		token = transport.Token
 	default:
-		log.Fatal("You must set either 'code' or 'client'")
+		return nil, errors.New("You must set either 'code' or 'client'")
 	}
 
 	err = config.TokenCache.PutToken(token)
 	if err != nil {
-		log.Fatal("Put Token:", err)
+		return nil, err
 	}
-	return
+	return token, nil
 }
