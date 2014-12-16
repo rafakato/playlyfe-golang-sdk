@@ -3,9 +3,10 @@ package playlyfe
 import (
 	"fmt"
 	"io/ioutil"
-
+	"log"
 	"net/http"
-	"os"
+	"net/http/httptest"
+	//"os"
 	"testing"
 )
 
@@ -28,11 +29,31 @@ func getConfigCode() (config PlaylyfeClientConfiguration) {
 	}
 }
 
-func startWebServer(port int) {
+func setCodeHandler() {
 	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		fmt.Fprintf(w, "Hi there, I love %s!", r.URL.Path[1:])
 	})
-	http.ListenAndServe(":"+string(port), nil)
+}
+
+func TestWebServr(t *testing.T) {
+	setCodeHandler()
+
+	resp := httptest.NewRecorder()
+
+	uri := "/code"
+
+	req, err := http.NewRequest("GET", uri, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	http.DefaultServeMux.ServeHTTP(resp, req)
+	if p, err := ioutil.ReadAll(resp.Body); err != nil || resp.Code != 200 {
+		t.Fail()
+	} else {
+		log.Printf("%+v", resp)
+		log.Println(string(p))
+	}
 }
 
 func TestClientTypeCode(t *testing.T) {
@@ -64,7 +85,7 @@ func TestClientTypeCode(t *testing.T) {
 	t.Logf("Testing base client result: %s", string(body))
 }
 
-/*func TestClientTypeClient(t *testing.T) {
+func TestClientTypeClient(t *testing.T) {
 	config := getConfigClient()
 
 	os.Remove("./token_cache.json")
@@ -184,4 +205,3 @@ func TestClientDeleteRaw(t *testing.T) {
 
 	t.Logf("Testing client raw delete: %s", result)
 }
-*/
